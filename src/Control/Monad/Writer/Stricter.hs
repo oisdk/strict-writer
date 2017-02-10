@@ -2,18 +2,42 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE ViewPatterns               #-}
 
+-- | This module provides monad transformer similar to
+-- 'Control.Monad.Writer.Strict.WriterT', implemented using 'StateT', making it
+-- tail recursive. (The traditional writer always leaks space: see
+-- <https://mail.haskell.org/pipermail/libraries/2013-March/019528.html here>
+-- for more information).
+--
+-- <https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/glasgow_exts.html#pattern-synonyms Pattern Synonyms>
+-- are used to provide the same interface as
+-- 'Control.Monad.Writer.Strict.WriterT'. Unfortunately, current GHC warns
+-- whenever these patterns are used that there are unmatched patterns: the
+-- <https://ghc.haskell.org/trac/ghc/ticket/8779 COMPLETE> pragma should solve
+-- this problem in future version of GHC.
+--
+-- A pattern synonym is also provided for a non-transformer version of writer.
+-- Again, this is just 'StateT' underneath, but its interface looks as if it was
+-- defined like so:
+--
+-- > newtype Writer w a = Writer { runWriter :: (a, w) }
+
 module Control.Monad.Writer.Stricter
-  (WriterT
+  (
+   -- * Transformer
+   WriterT
   ,runWriterT
   ,pattern WriterT
-  ,Writer
-  ,runWriter
-  ,pattern Writer
   ,execWriterT
   ,evalWriterT
+  ,
+   -- * Plain
+   Writer
+  ,runWriter
+  ,pattern Writer
   ,execWriter
   ,evalWriter)
   where
@@ -34,12 +58,25 @@ import           Data.Functor.Classes
 import           Data.Monoid
 
 -- | A monad transformer similar to 'Control.Monad.Writer.Strict.WriterT', except
--- that it does not leak space.
+-- that it does not leak space. It is implemented using a state monad, so that
+-- `mappend` is tail recursive. See
+-- <https://mail.haskell.org/pipermail/libraries/2013-March/019528.html this>
+-- email to the Haskell libraries committee for more information.
+--
+-- Wherever possible, coercions are used to eliminate any overhead from the
+-- newtype wrapper.
+--
+-- >>> 2
+-- 2
 newtype WriterT s m a =
     WriterT_ (StateT s m a)
     deriving (Functor,Applicative,Monad,MonadTrans,MonadCont,MonadError e
              ,MonadReader r,MonadFix,MonadFail,MonadIO,Alternative,MonadPlus)
 
+first_  :: Functor f => (a -> f b) -> (a, c) -> f (b, c)
+first_  f (x,y) = fmap (,y) (f x)
+
+-- | Run a writer computation in the underlying monad.
 runWriterT
     :: Monoid s
     => WriterT s m a -> m (a, s)
@@ -49,27 +86,51 @@ runWriterT =
 
 {-# INLINE runWriterT #-}
 
+{-# ANN module "HLint: ignore Use second" #-}
+
+-- | This pattern gives the newtype wrapper around 'StateT' the same interface
+-- as 'Control.Monad.Writer.Strict.WriterT'. Unfortunately, GHC currently warns
+-- that a function is incomplete wherever this pattern is used. This issue
+-- should be solved in a future version of GHC, when the
+-- <https://ghc.haskell.org/trac/ghc/ticket/8779 COMPLETE> pragma is
+-- implemented.
 pattern WriterT :: (Functor m, Monoid s) =>
         m (a, s) -> WriterT s m a
 
 pattern WriterT x <- (runWriterT -> x)
   where WriterT y
-          = WriterT_ (StateT (\ s -> (fmap . fmap) (mappend s) y))
+          = WriterT_ (StateT (\ s -> fmap  (\(x,p) -> (x, mappend s p)) y))
 
+-- | A type synonym for the plain (non-transformer) version of 'WriterT'. This
+-- can be used as if it were defined as:
+--
+-- > newtype Writer w a = Writer { runWriter :: (a, w) }
 type Writer s = WriterT s Identity
 
+-- | This pattern gives the newtype wrapper around 'StateT' the same interface
+-- as as if it was defined like so:
+--
+-- > newtype Writer w a = Writer { runWriter :: (a, w) }
+--
+-- Unfortunately GHC warns that a function is incomplete wherever this pattern
+-- is used. This issue should be solved in a future version of GHC, when the
+-- <https://ghc.haskell.org/trac/ghc/ticket/8779 COMPLETE> pragma is
+-- implemented.
 pattern Writer :: Monoid s => (a, s) -> Writer s a
 
 pattern Writer x <- (runWriter -> x)
   where Writer (y, p)
-          = WriterT_ (StateT (\ s -> Identity (y, mappend p s)))
+          = WriterT_ (StateT (\s -> Identity (y, mappend s p)))
 
+-- | Run a writer computation.
 runWriter
     :: Monoid s
     => Writer s a -> (a, s)
 runWriter =
-    (coerce :: (WriterT s Identity a -> Identity (a, s)) -> (WriterT s Identity a -> (a, s)))
-        runWriterT
+    (coerce
+       :: (WriterT s Identity a -> Identity (a, s))
+       -> (WriterT s Identity a -> (a, s))
+    ) runWriterT
 
 {-# INLINE runWriter #-}
 
@@ -90,6 +151,7 @@ instance MonadState s m =>
     put = lift . put
     state = lift . state
 
+-- | Run a writer computation in the underlying monad, and return its result.
 evalWriterT
     :: (Monad m, Monoid s)
     => WriterT s m a -> m a
@@ -99,6 +161,7 @@ evalWriterT =
 
 {-# INLINE evalWriterT #-}
 
+-- | Run a writer computation in the underlying monad, and collect its output.
 execWriterT
     :: (Monad m, Monoid s)
     => WriterT s m a -> m s
@@ -108,6 +171,7 @@ execWriterT =
 
 {-# INLINE execWriterT #-}
 
+-- | Run a writer computation, and return its result.
 evalWriter
     :: Monoid s
     => Writer s a -> a
@@ -116,6 +180,7 @@ evalWriter =
 
 {-# INLINE evalWriter #-}
 
+-- | Run a writer computation, and collect its output.
 execWriter
     :: Monoid s
     => Writer s a -> s
@@ -131,11 +196,6 @@ instance (Foldable m, Monoid w) =>
             (\(x,_) ->
                   f x) .
         runWriterT
-
-first_
-    :: Applicative f
-    => (a -> f b) -> (a, c) -> f (b, c)
-first_ f (x,y) = flip (,) y <$> f x
 
 instance (Traversable m, Monoid w) =>
          Traversable (WriterT w m) where
