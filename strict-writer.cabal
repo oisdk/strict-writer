@@ -1,7 +1,7 @@
 name:                strict-writer
-version:             0.1.0.0
-synopsis:            Initial project template from stack
-description:         Please see README.md
+version:             0.1.0.1
+synopsis:            A stricter writer, which uses StateT in order to avoid space leaks.
+description:         A stricter writer, which uses StateT in order to avoid space leaks.
 homepage:            https://github.com/oisdk/strict-writer
 license:             MIT
 license-file:        LICENSE
