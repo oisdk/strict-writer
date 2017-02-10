@@ -8,19 +8,19 @@ module Control.Monad.Writer.Stricter
   (WriterT
   ,runWriterT
   ,pattern WriterT
-  ,Weighted
-  ,runWeighted
-  ,pattern Weighted
+  ,Writer
+  ,runWriter
+  ,pattern Writer
   ,execWriterT
   ,evalWriterT
-  ,execWeighted
-  ,evalWeighted)
+  ,execWriter
+  ,evalWriter)
   where
 
 import           Control.Applicative
 import           Control.Monad.Identity
 import           Control.Monad.State.Strict
-import           Control.Monad.Writer hiding (WriterT(..), execWriterT)
+import           Control.Monad.Writer hiding (WriterT(..), execWriterT, runWriter, Writer, execWriter)
 import           Data.Coerce
 
 -- | A monad transformer similar to 'Control.Monad.Writer.Strict.WriterT', except
@@ -41,19 +41,19 @@ pattern WriterT :: (Functor m, Monoid s) => m (a, s) -> WriterT s m a
 pattern WriterT x <- (runWriterT -> x) where
   WriterT y = WriterT_ (StateT (\s -> (fmap.fmap) (mappend s) y))
 
-type Weighted s = WriterT s Identity
+type Writer s = WriterT s Identity
 
-pattern Weighted :: Monoid s => (a, s) -> Weighted s a
-pattern Weighted x <- (runWeighted -> x) where
-  Weighted (y,p) = WriterT_ (StateT (\s -> Identity (y, mappend p s)))
+pattern Writer :: Monoid s => (a, s) -> Writer s a
+pattern Writer x <- (runWriter -> x) where
+  Writer (y,p) = WriterT_ (StateT (\s -> Identity (y, mappend p s)))
 
-runWeighted
+runWriter
     :: Monoid s
-    => Weighted s a -> (a, s)
-runWeighted =
+    => Writer s a -> (a, s)
+runWriter =
     (coerce :: (WriterT s Identity a -> Identity (a, s)) -> (WriterT s Identity a -> (a, s)))
         runWriterT
-{-# INLINE runWeighted #-}
+{-# INLINE runWriter #-}
 
 instance (Monoid s, Monad m) => MonadWriter s (WriterT s m) where
   writer (x, s) = WriterT (pure (x, s))
@@ -76,17 +76,17 @@ execWriterT =
         (`execStateT` mempty)
 {-# INLINE execWriterT #-}
 
-evalWeighted :: Monoid s => Weighted s a -> a
-evalWeighted =
-    (coerce :: (State s a -> a) -> Weighted s a -> a)
+evalWriter :: Monoid s => Writer s a -> a
+evalWriter =
+    (coerce :: (State s a -> a) -> Writer s a -> a)
         (`evalState` mempty)
-{-# INLINE evalWeighted #-}
+{-# INLINE evalWriter #-}
 
-execWeighted :: Monoid s => Weighted s a -> s
-execWeighted =
-    (coerce :: (State s a -> s) -> Weighted s a -> s)
+execWriter :: Monoid s => Writer s a -> s
+execWriter =
+    (coerce :: (State s a -> s) -> Writer s a -> s)
         (`execState` mempty)
-{-# INLINE execWeighted #-}
+{-# INLINE execWriter #-}
 
 instance (Alternative m, Monad m, Monoid s) => Alternative (WriterT s m) where
   empty = WriterT empty
