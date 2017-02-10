@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE Strict                     #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE ViewPatterns               #-}
@@ -65,9 +66,6 @@ import           Data.Monoid
 --
 -- Wherever possible, coercions are used to eliminate any overhead from the
 -- newtype wrapper.
---
--- >>> 2
--- 2
 newtype WriterT s m a =
     WriterT_ (StateT s m a)
     deriving (Functor,Applicative,Monad,MonadTrans,MonadCont,MonadError e
@@ -116,6 +114,9 @@ type Writer s = WriterT s Identity
 -- is used. This issue should be solved in a future version of GHC, when the
 -- <https://ghc.haskell.org/trac/ghc/ticket/8779 COMPLETE> pragma is
 -- implemented.
+--
+-- >>> execWriter $ traverse (\x -> Writer (x, [x])) [1..5]
+-- [1,2,3,4,5]
 pattern Writer :: Monoid s => (a, s) -> Writer s a
 
 pattern Writer x <- (runWriter -> x)
@@ -123,6 +124,9 @@ pattern Writer x <- (runWriter -> x)
           = WriterT_ (StateT (\s -> Identity (y, mappend s p)))
 
 -- | Run a writer computation.
+--
+-- >>> runWriter $ traverse (\x -> Writer (show x, [x])) [1..5]
+-- (["1","2","3","4","5"],[1,2,3,4,5])
 runWriter
     :: Monoid s
     => Writer s a -> (a, s)

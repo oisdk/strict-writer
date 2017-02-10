@@ -1,5 +1,5 @@
 name:                strict-writer
-version:             0.3.0.0
+version:             0.4.0.0
 synopsis:            A stricter writer, which uses StateT in order to avoid space leaks.
 description:         A stricter writer, which uses StateT in order to avoid space leaks.
 homepage:            https://github.com/oisdk/strict-writer
