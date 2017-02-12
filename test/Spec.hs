@@ -80,7 +80,15 @@ reflexiveEq :: WriterT String [] Integer -> Property
 reflexiveEq xs = xs === xs
 
 longSum :: Property
-longSum = once $ getSum (execWriter (traverse (\x -> Writer ((),Sum x)) [1..100000000])) === (5000000050000000 :: Integer)
+longSum =
+    once $
+    getSum
+        (execWriter
+             (traverse
+                  (\x ->
+                        Writer ((), Sum x))
+                  [1 .. 100000000])) ===
+    (5000000050000000 :: Integer)
 
 main :: IO ()
 main = do
